@@ -1,0 +1,1 @@
+Spieleprofile werden als JSON-Liste in games.json gespeichert. Eintrag: {"Id": 1234, "Name": "Dein Spiel", "KeyHex": "0000000000000000"}. Numerische Kennungen und Parameter müssen zur tatsächlich verwendeten Spielschnittstelle passen. HeadRelay bringt keine fremde Spiele-Datenbank mit.

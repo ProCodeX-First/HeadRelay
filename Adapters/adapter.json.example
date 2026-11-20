@@ -1,0 +1,18 @@
+{
+  "Id": "custom-headset",
+  "Name": "Eigenes Headset",
+  "VendorId": "0000",
+  "ProductId": "0000",
+  "Interface": "05",
+  "Collection": "01",
+  "InputLength": 64,
+  "ReportId": 5,
+  "HeaderOffset": 0,
+  "HeaderHex": "050803",
+  "XOffset": 11,
+  "YOffset": 13,
+  "ZOffset": 15,
+  "WOffset": 17,
+  "Scale": 16384,
+  "NeedsCalibration": true
+}

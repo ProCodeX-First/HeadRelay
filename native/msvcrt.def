@@ -1,0 +1,5 @@
+; SPDX-License-Identifier: MIT
+LIBRARY msvcrt.dll
+EXPORTS
+memcpy
+memset

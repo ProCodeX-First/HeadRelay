@@ -1,0 +1,26 @@
+; SPDX-License-Identifier: MIT
+EXPORTS
+NPPriv_ClientNotify=_NPPriv_ClientNotify@0 @1
+NPPriv_GetLastError=_NPPriv_GetLastError@0 @2
+NPPriv_SetData=_NPPriv_SetData@0 @3
+NPPriv_SetLastError=_NPPriv_SetLastError@0 @4
+NPPriv_SetParameter=_NPPriv_SetParameter@0 @5
+NPPriv_SetSignature=_NPPriv_SetSignature@0 @6
+NPPriv_SetVersion=_NPPriv_SetVersion@0 @7
+NP_GetData=_NP_GetData@4 @8
+NP_GetParameter=_NP_GetParameter@8 @9
+NP_GetSignature=_NP_GetSignature@4 @10
+NP_QueryVersion=_NP_QueryVersion@4 @11
+NP_ReCenter=_NP_ReCenter@0 @12
+NP_RegisterProgramProfileID=_NP_RegisterProgramProfileID@4 @13
+NP_RegisterWindowHandle=_NP_RegisterWindowHandle@4 @14
+NP_RequestData=_NP_RequestData@4 @15
+NP_SetParameter=_NP_SetParameter@8 @16
+NP_StartCursor=_NP_StartCursor@0 @17
+NP_StartDataTransmission=_NP_StartDataTransmission@0 @18
+NP_StopCursor=_NP_StopCursor@0 @19
+NP_StopDataTransmission=_NP_StopDataTransmission@0 @20
+NP_UnregisterWindowHandle=_NP_UnregisterWindowHandle@0 @21
+FTGetData=_FTGetData@4
+FTGetDllVersion=_FTGetDllVersion@0
+FTProvider=_FTProvider@0

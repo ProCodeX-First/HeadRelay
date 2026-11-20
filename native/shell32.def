@@ -1,0 +1,4 @@
+; SPDX-License-Identifier: MIT
+LIBRARY SHELL32.dll
+EXPORTS
+CommandLineToArgvW

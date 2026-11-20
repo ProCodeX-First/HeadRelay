@@ -1,0 +1,9 @@
+{
+  "reference": "https://github.com/uglyDwarf/linuxtrack/blob/master/src/wine_bridge/client/NPClient_main.c",
+  "referenceSha256": "ad526695c0f7868491427cf5fca22ab983e9659c86f289b4a8e9db324de56aaa",
+  "license": "MIT",
+  "licenseSha256": "7c843c95e4522dd44e9591fa7309146cb94717c1f51e1def2b163984ac34e59f",
+  "opentrackBinariesBundled": false,
+  "vendorSignatureBundled": false,
+  "vendorGameDatabaseBundled": false
+}
