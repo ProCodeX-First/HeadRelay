@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+using Microsoft.Win32;
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
@@ -30,6 +31,8 @@ public static class Entry
 }
 public sealed class StudioController
 {
+ readonly GameIntegration integration = new(Registry.CurrentUser, AppContext.BaseDirectory);
+ bool integrationInstalled;
  readonly EventWaitHandle recenterRequest=new(false,EventResetMode.AutoReset,"Local\\HeadRelay.Recenter");
  readonly Window w;readonly SensorReader reader=new();readonly MotionFilter filter=new();readonly HeadPreview preview=new();readonly AppSettings settings=AppSettings.Load();
  readonly List<AdapterDescriptor> adapters;readonly List<string> events=new();List<DeviceInfo> devices=new();readonly DispatcherTimer tick=new(){Interval=TimeSpan.FromMilliseconds(16)};readonly DispatcherTimer refresh=new(){Interval=TimeSpan.FromSeconds(5)};
@@ -41,8 +44,8 @@ public sealed class StudioController
  w=window;adapters=AdapterDescriptor.Load(Path.Combine(AppContext.BaseDirectory,"Adapters"),Log);E<Grid>("PreviewHost").Children.Add(preview);
  foreach(var name in new[]{"Dashboard","Devices","Calibration","Output","Settings","Diagnostics"}){var n=name;B("Nav"+n).Click+=(_,_)=>Show(n);}
  B("ConnectButton").Click+=async(_,_)=>await ToggleConnect();B("RefreshButton").Click+=async(_,_)=>await Scan();B("SetupButton").Click+=async(_,_)=>{if(!reader.Running)await Connect();BeginCalibration();};B("RecenterButton").Click+=(_,_)=>Recenter();B("StartButton").Click+=(_,_)=>ToggleOutput();B("CaptureButton").Click+=async(_,_)=>await Capture();B("ResetCalibrationButton").Click+=(_,_)=>BeginCalibration();
- B("InstallButton").Click+=(_,_)=>{try{GameIntegration.Install();Log("Direkte Spielanbindung eingerichtet; vorheriger Pfad gesichert.");Toast("Spielanbindung eingerichtet. Starte das Spiel danach neu.");}catch(Exception ex){Toast(ex.Message);Log(ex.ToString());}UpdateIntegration();};
- B("RestoreButton").Click+=(_,_)=>{try{StopOutput();GameIntegration.Restore();Log("Vorherige Spielanbindung wiederhergestellt.");Toast("Die vorherige Spielanbindung wurde wiederhergestellt.");}catch(Exception ex){Toast(ex.Message);}UpdateIntegration();};
+ B("InstallButton").Click+=(_,_)=>ConfigureIntegration();
+ B("RestoreButton").Click+=(_,_)=>{try{StopOutput();integration.Restore();Log("Vorherige Spielanbindung wiederhergestellt.");Toast("Die vorherige Spielanbindung wurde wiederhergestellt.");}catch(Exception ex){Toast(ex.Message);}UpdateIntegration();};
  E<ComboBox>("DeviceChoice").SelectionChanged+=(_,_)=>{if(scanning)return;SelectDevice(E<ComboBox>("DeviceChoice").SelectedItem as DeviceInfo);};
  E<ListBox>("DevicesList").SelectionChanged+=(_,_)=>{if(scanning||reader.Running)return;if(E<ListBox>("DevicesList").SelectedItem is DeviceInfo d){E<ComboBox>("DeviceChoice").SelectedItem=devices.FirstOrDefault(x=>x.Path==d.Path);Show("Dashboard");}};
  B("ExportButton").Click+=(_,_)=>Export();B("OpenFolderButton").Click+=(_,_)=>Process.Start(new ProcessStartInfo(AppContext.BaseDirectory){UseShellExecute=true});
@@ -52,7 +55,7 @@ public sealed class StudioController
  foreach(var name in new[]{"InvertYaw","InvertPitch"}){E<CheckBox>(name+"Check").Checked+=(_,_)=>ReadMotionControls();E<CheckBox>(name+"Check").Unchecked+=(_,_)=>ReadMotionControls();}
  E<RadioButton>(settings.Output=="udp"?"UdpRadio":"DirectRadio").IsChecked=true;
  w.SourceInitialized+=(_,_)=>RegisterKeys();w.Closed+=(_,_)=>Close();w.PreviewKeyDown+=async(_,e)=>{if(e.Key==Key.Space&&page=="Calibration"){e.Handled=true;await Capture();}};
- tick.Tick+=(_,_)=>Update();refresh.Tick+=async(_,_)=>{if(!closed)await Scan();};tick.Start();refresh.Start();Show("Dashboard");UpdateIntegration();Log("HeadRelay 0.2 gestartet. Zwei integrierte JBL-Adapter.");w.Loaded+=async(_,_)=>await Scan();
+ tick.Tick+=(_,_)=>Update();refresh.Tick+=async(_,_)=>{if(!closed)await Scan();};tick.Start();refresh.Start();Show("Dashboard");UpdateIntegration();Log("HeadRelay 0.2.1 gestartet. Zwei integrierte JBL-Adapter.");w.Loaded+=async(_,_)=>await Scan();
  }
  void SelectDevice(DeviceInfo? d)
  {
@@ -101,14 +104,39 @@ public sealed class StudioController
  if(outputActive){StopOutput();return;}if(!reader.Running||reader.Snapshot().Time<DateTime.UtcNow.AddMilliseconds(-500)){Toast("Zuerst das Headset verbinden und auf Sensordaten warten.");return;}if(frame is null||calibrating){Show("Calibration");Toast("Schließe zuerst das Anlernen der Bewegungen ab.");return;}
  try{if(settings.Output=="direct"){
  if(Process.GetProcessesByName("opentrack").Length>0){Show("Output");Toast("Ein anderer Tracker läuft. Bitte vor der direkten Ausgabe schließen.");return;}
- if(!GameIntegration.Installed()){Show("Output");Toast("Richte zuerst die direkte Spielanbindung ein.");return;}
+ if(!integration.Installed()){Show("Output");Toast("Richte zuerst die direkte Spielanbindung ein.");return;}
  direct=new DirectOutput(Path.Combine(AppContext.BaseDirectory,"Profiles","games.json"));
  }else udp=new UdpOutput();outputActive=true;B("StartButton").Content="Tracking pausieren";Log("Tracking gestartet: "+settings.Output);Toast(settings.Output=="direct"?"Direkte Ausgabe aktiv. Das Spiel kann jetzt auf TrackIR zugreifen.":"UDP-Ausgabe aktiv.");
  }catch(Exception ex){StopOutput();Toast("Ausgabe konnte nicht starten: "+ex.Message);Log(ex.ToString());}
  }
  void StopOutput(){if(outputActive)Log("Tracking pausiert.");outputActive=false;try{direct?.Dispose();}catch{}direct=null;try{udp?.Write(0,0);udp?.Dispose();}catch{}udp=null;B("StartButton").Content="Tracking starten";}
  void SetOutput(string name){if(updating)return;StopOutput();settings.Output=name;Save();UpdateIntegration();}
- void UpdateIntegration(){var installed=GameIntegration.Installed();T("IntegrationState").Text=installed?"✓ Direkte Spielanbindung eingerichtet":"Noch nicht eingerichtet · einmaliger Schritt";T("OutputSummary").Text=settings.Output=="udp"?"UDP-Ausgabe":"Direkt zum Spiel";B("InstallButton").Content=installed?"Spielanbindung erneut einrichten":"Spielanbindung einrichten";}
+ void ConfigureIntegration()
+ {
+     try
+     {
+         string? modules = integration.FindOpenTrack();
+         if (modules == null)
+         {
+             var picker = new OpenFileDialog
+             {
+                 Title = "OpenTrack auswählen · installierte opentrack.exe öffnen",
+                 Filter = "OpenTrack (opentrack.exe)|opentrack.exe",
+                 CheckFileExists = true
+             };
+             if (picker.ShowDialog(w) != true) return;
+             if (!string.Equals(Path.GetFileName(picker.FileName), "opentrack.exe", StringComparison.OrdinalIgnoreCase))
+                 throw new InvalidDataException("Wähle die opentrack.exe deiner OpenTrack-Installation.");
+             modules = Path.Combine(Path.GetDirectoryName(picker.FileName)!, "modules");
+         }
+         integration.Install(modules);
+         Log("OpenTrack-Spielanbindung eingerichtet. Vorherige Pfade gesichert.");
+         Toast("Jetzt Tracking starten und danach das Spiel neu starten.");
+     }
+     catch (Exception ex) { Toast(ex.Message); Log(ex.Message); }
+     finally { UpdateIntegration(); }
+ }
+ void UpdateIntegration(){integrationInstalled=integration.Installed();T("IntegrationState").Text=integrationInstalled?"✓ Direkte Spielanbindung eingerichtet":"Noch nicht eingerichtet · einmaliger Schritt";T("OutputSummary").Text=settings.Output=="udp"?"UDP-Ausgabe":"Direkt zum Spiel";B("InstallButton").Content=integrationInstalled?"Spielanbindung erneut einrichten":"Spielanbindung einrichten";}
  void LoadMotionControls(){updating=true;var m=settings.Motion;E<Slider>("GainYawSlider").Value=m.GainYaw;E<Slider>("GainPitchSlider").Value=m.GainPitch;E<Slider>("SmoothingSlider").Value=m.SmoothingMs;E<Slider>("DeadZoneSlider").Value=m.DeadZone;E<Slider>("CurveSlider").Value=m.Curve;E<CheckBox>("InvertYawCheck").IsChecked=m.InvertYaw;E<CheckBox>("InvertPitchCheck").IsChecked=m.InvertPitch;updating=false;MotionLabels();}
  void ReadMotionControls(){if(updating)return;var m=settings.Motion;m.GainYaw=E<Slider>("GainYawSlider").Value;m.GainPitch=E<Slider>("GainPitchSlider").Value;m.SmoothingMs=E<Slider>("SmoothingSlider").Value;m.DeadZone=E<Slider>("DeadZoneSlider").Value;m.Curve=E<Slider>("CurveSlider").Value;m.InvertYaw=E<CheckBox>("InvertYawCheck").IsChecked==true;m.InvertPitch=E<CheckBox>("InvertPitchCheck").IsChecked==true;MotionLabels();Save();}
  void MotionLabels(){var m=settings.Motion;T("GainYawLabel").Text=$"Links / Rechts · {m.GainYaw:F2}×";T("GainPitchLabel").Text=$"Oben / Unten · {m.GainPitch:F2}×";T("SmoothingLabel").Text=$"Glättung · {m.SmoothingMs:F0} ms";T("DeadZoneLabel").Text=$"Ruhezone · {m.DeadZone:F1}°";T("CurveLabel").Text=$"Bewegungskurve · {m.Curve:F2}";}
@@ -125,16 +153,16 @@ public sealed class StudioController
  T("TopStatus").Text=live?(outputActive?"Tracking aktiv · "+device?.Name:"Sensor verbunden · "+device?.Name):reader.Running?"Warte auf Sensorsignal":device is not null?"Headset erkannt · noch nicht verbunden":"Bereit für dein Headset";
  E<System.Windows.Shapes.Ellipse>("StatusDot").Fill=new SolidColorBrush(live?Color.FromRgb(148,227,194):Color.FromRgb(126,139,146));
  T("DeviceHint").Text=live?$"Rotationsdaten empfangen · {reader.Hz} Hz":reader.Running?"Warte auf Sensordaten. Headtracking in der Herstellersoftware aktivieren.":device?.Supported==true?"USB erkannt · Headset verbinden.":device is null?"USB-Basisstation anschließen und Geräte suchen.":"Für dieses Modell fehlt ein Signaladapter.";
- B("RecenterButton").IsEnabled=live;B("StartButton").IsEnabled=live&&frame is not null&&!calibrating;T("GameSummary").Text=direct?.GameName??(settings.Output=="udp"?(outputActive?"Lokal an Port 5555":"UDP-Empfänger an Port 5555"):(GameIntegration.Installed()?"TrackIR-Brücke bereit":"Spielanbindung noch einrichten"));
+ B("RecenterButton").IsEnabled=live;B("StartButton").IsEnabled=live&&frame is not null&&!calibrating;T("GameSummary").Text=direct?.GameName??(settings.Output=="udp"?(outputActive?"Lokal an Port 5555":"UDP-Empfänger an Port 5555"):(integrationInstalled?"TrackIR-Brücke bereit":"Spielanbindung noch einrichten"));
  if(outputActive){if(!live){StopOutput();Toast("Sensorsignal unterbrochen. Tracking wurde pausiert.");}else try{direct?.Write(yaw,pitch);udp?.Write(yaw,pitch);}catch(Exception ex){StopOutput();Toast("Ausgabefehler: "+ex.Message);Log(ex.ToString());}}
  if(DateTime.UtcNow>footerUntil)T("FooterText").Text=live?(frame is null?"Headset anlernen, um die Bewegungsachsen zuzuordnen.":outputActive?"Tracking aktiv · F9 zentriert · F10 pausiert":"Vorschau aktiv · Tracking starten, wenn du bereit bist."):"Headset verbinden, dann die Kalibrierung starten.";
  }
  void UpdateCalibrationSummary(){T("CalibrationSummary").Text=frame is null?"Noch keine Kalibrierung":device?.Adapter?.NeedsCalibration==false&&!settings.Frames.ContainsKey(device.Adapter.Id)?"Standardausrichtung bereit":"Persönlich kalibriert";}
- void Show(string name){page=name;foreach(var n in new[]{"Dashboard","Devices","Calibration","Output","Settings","Diagnostics"}){E<Grid>("Page"+n).Visibility=n==name?Visibility.Visible:Visibility.Collapsed;B("Nav"+n).Background=n==name?new SolidColorBrush(Color.FromRgb(37,51,47)):Brushes.Transparent;B("Nav"+n).Foreground=n==name?new SolidColorBrush(Color.FromRgb(148,227,194)):new SolidColorBrush(Color.FromRgb(169,184,191));}if(name=="Calibration")UpdateWizard();}
+ void Show(string name){page=name;foreach(var n in new[]{"Dashboard","Devices","Calibration","Output","Settings","Diagnostics"}){E<Grid>("Page"+n).Visibility=n==name?Visibility.Visible:Visibility.Collapsed;B("Nav"+n).Background=n==name?new SolidColorBrush(Color.FromRgb(37,51,47)):Brushes.Transparent;B("Nav"+n).Foreground=n==name?new SolidColorBrush(Color.FromRgb(148,227,194)):new SolidColorBrush(Color.FromRgb(169,184,191));}if(name=="Calibration")UpdateWizard();if(name=="Output")UpdateIntegration();}
  void Toast(string s){T("FooterText").Text=s;footerUntil=DateTime.UtcNow.AddSeconds(9);}
  void Log(string s){events.Add($"{DateTime.Now:HH:mm:ss}  {s}");if(events.Count>250)events.RemoveAt(0);if(w.FindName("LogText") is TextBox box){box.Text=string.Join(Environment.NewLine,events);box.ScrollToEnd();}}
  void Save(){try{settings.Save();}catch(Exception ex){Log("Einstellungen konnten nicht gespeichert werden: "+ex.Message);}}
- void Export(){try{Directory.CreateDirectory(Path.Combine(AppContext.BaseDirectory,"Diagnose"));var path=Path.Combine(AppContext.BaseDirectory,"Diagnose","Axis-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".json");var report=new{App="HeadRelay 0.2",Time=DateTimeOffset.Now,Devices=devices.Select(d=>new{d.Name,d.Product,Adapter=d.Adapter?.Id,d.ReportLength}),Sensor=new{reader.Running,reader.Hz,reader.Error,reader.Rejected},Output=settings.Output,OutputActive=outputActive,Calibration=frame?.Data(),Motion=settings.Motion,Events=events};File.WriteAllText(path,JsonSerializer.Serialize(report,new JsonSerializerOptions{WriteIndented=true}));Toast("Diagnose gespeichert: "+Path.GetFileName(path));Log("Diagnose gespeichert: "+path);}catch(Exception ex){Toast(ex.Message);}}
+ void Export(){try{Directory.CreateDirectory(Path.Combine(AppContext.BaseDirectory,"Diagnose"));var path=Path.Combine(AppContext.BaseDirectory,"Diagnose","Axis-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".json");var report=new{App="HeadRelay 0.2.1",Time=DateTimeOffset.Now,Devices=devices.Select(d=>new{d.Name,d.Product,Adapter=d.Adapter?.Id,d.ReportLength}),Sensor=new{reader.Running,reader.Hz,reader.Error,reader.Rejected},Output=settings.Output,OutputActive=outputActive,Calibration=frame?.Data(),Motion=settings.Motion,Events=events};File.WriteAllText(path,JsonSerializer.Serialize(report,new JsonSerializerOptions{WriteIndented=true}));Toast("Diagnose gespeichert: "+Path.GetFileName(path));Log("Diagnose gespeichert: "+path);}catch(Exception ex){Toast(ex.Message);}}
  void RegisterKeys(){var handle=new WindowInteropHelper(w).Handle;int dark=1;try{DwmSetWindowAttribute(handle,20,ref dark,4);}catch{}hwndSource=HwndSource.FromHwnd(handle);hwndSource?.AddHook(Hook);if(!RegisterHotKey(handle,901,0x4000,0x78))Log("F9 ist bereits belegt; Zentrieren über die Schaltfläche möglich.");if(!RegisterHotKey(handle,902,0x4000,0x79))Log("F10 ist bereits belegt; Pause über die Schaltfläche möglich.");}
  IntPtr Hook(IntPtr h,int msg,IntPtr wp,IntPtr lp,ref bool handled){if(msg==0x0312){if(wp.ToInt32()==901)Recenter();else if(wp.ToInt32()==902)ToggleOutput();handled=true;}return IntPtr.Zero;}
  void Close(){closed=true;recenterRequest.Dispose();tick.Stop();refresh.Stop();StopOutput();reader.Dispose();Save();var h=new WindowInteropHelper(w).Handle;UnregisterHotKey(h,901);UnregisterHotKey(h,902);if(hwndSource is not null)hwndSource.RemoveHook(Hook);}

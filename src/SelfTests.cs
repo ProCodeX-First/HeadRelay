@@ -13,6 +13,75 @@ public static class SelfTests
  [UnmanagedFunctionPointer(CallingConvention.StdCall)]delegate int RegisterProfile(ushort id);
  [UnmanagedFunctionPointer(CallingConvention.StdCall)]delegate int ReadPose(IntPtr p);
  [UnmanagedFunctionPointer(CallingConvention.StdCall)]delegate int NativeControl();
+ static void CheckIntegration(Action<bool, string> check)
+ {
+     string name = Guid.NewGuid().ToString("N");
+     string keyName = @"Software\HeadRelay.Test." + name;
+     string directory = Path.Combine(Path.GetTempPath(), "HeadRelay.Test." + name);
+     string bridge = Path.Combine(directory, "Bridge") + Path.DirectorySeparatorChar;
+     string modules = Path.Combine(directory, "Custom OpenTrack", "modules");
+     string backup = Path.Combine(directory, "Data", "integration-backup.json");
+     Directory.CreateDirectory(directory);
+     try
+     {
+         using var user = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(keyName);
+         var integration = new GameIntegration(user, directory);
+         using var np = user.CreateSubKey(GameIntegration.NPKey);
+         using var ft = user.CreateSubKey(GameIntegration.FTKey);
+         string? Current(Microsoft.Win32.RegistryKey key) => key.GetValue("Path") as string;
+         Directory.CreateDirectory(bridge);
+         foreach (var file in new[] { "freetrackclient.dll", "freetrackclient64.dll", "TrackIR.exe" })
+             File.WriteAllBytes(Path.Combine(bridge, file), Array.Empty<byte>());
+
+         Directory.CreateDirectory(modules);
+         File.WriteAllBytes(Path.Combine(modules, "..", "opentrack.exe"), Array.Empty<byte>());
+         File.WriteAllBytes(Path.Combine(modules, "NPClient.dll"), Array.Empty<byte>());
+         np.SetValue("Path", bridge);
+         ft.SetValue("Path", bridge);
+         check(!integration.Installed(), "The v0.2.0 HeadRelay client path requires reconfiguration");
+         bool rejected = false;
+         try { integration.Install(modules); } catch (DirectoryNotFoundException) { rejected = true; }
+         check(rejected && Current(np) == bridge && Current(ft) == bridge && !File.Exists(backup),
+             "An incomplete OpenTrack install leaves registry and backup untouched");
+
+         File.WriteAllBytes(Path.Combine(modules, "NPClient64.dll"), Array.Empty<byte>());
+         Directory.CreateDirectory(Path.GetDirectoryName(backup)!);
+         var original = Path.Combine(directory, "EarlierTracker");
+         var legacy = new[] {
+             new { Key = GameIntegration.NPKey, Name = "Path", Existed = true, Value = (string?)original },
+             new { Key = GameIntegration.FTKey, Name = "Path", Existed = false, Value = (string?)null }
+         };
+         File.WriteAllText(backup, System.Text.Json.JsonSerializer.Serialize(legacy));
+         integration.Install(modules);
+         string target = modules + Path.DirectorySeparatorChar;
+         check(Current(np) == target && Current(ft) == bridge && integration.Installed(),
+             "TrackIR uses OpenTrack, FreeTrack uses the local client");
+         check(integration.FindOpenTrack() == target, "Custom OpenTrack install is rediscovered");
+         integration.Install(modules);
+         integration.Restore();
+         check(Current(np) == original && Current(ft) == null, "Repeated configuration preserves pre-0.2.0 values");
+         integration.Install(modules);
+         ft.SetValue("Path", original);
+         integration.Restore();
+         check(Current(np) == original && Current(ft) == original, "An external registry change is preserved");
+
+         // On an equipped PC, also verify the real installed modules through the isolated registration.
+         var system = new GameIntegration(Microsoft.Win32.Registry.CurrentUser, directory).FindOpenTrack();
+         if (system != null)
+         {
+             integration.Install(system);
+             check(File.Exists(Path.Combine(Current(np)!, "NPClient64.dll")) && integration.Installed(),
+                 "Original OpenTrack client resolves through the configured game registry path");
+             integration.Restore();
+             notes.Add("Installed OpenTrack client located and registered in the isolated test key: PASS");
+         }
+     }
+     finally
+     {
+         Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(keyName, throwOnMissingSubKey: false);
+         Directory.Delete(directory, recursive: true);
+     }
+ }
  public static int Run()
  {
  var root=AppContext.BaseDirectory;var report=Path.Combine(root,"Tests","TestResults.txt");Directory.CreateDirectory(Path.GetDirectoryName(report)!);
@@ -43,7 +112,7 @@ public static class SelfTests
  // Native DLL test uses a unique heap: never touches a running tracking session.
  var nativeHeap="HeadRelay.NativeTest."+Guid.NewGuid();
  Environment.SetEnvironmentVariable("HEADRELAY_BRIDGE_HEAP",nativeHeap);
- var dll=NativeLibrary.Load(Path.Combine(root,"Bridge","NPClient64.dll"));try{
+ var dll=NativeLibrary.Load(Path.Combine(root,"Bridge","freetrackclient64.dll"));try{
  var register=Marshal.GetDelegateForFunctionPointer<RegisterProfile>(NativeLibrary.GetExport(dll,"NP_RegisterProgramProfileID"));var read=Marshal.GetDelegateForFunctionPointer<ReadPose>(NativeLibrary.GetExport(dll,"NP_GetData"));
  var controls=new[]{"NP_StartDataTransmission","NP_StopDataTransmission","NP_ReCenter","NP_UnregisterWindowHandle"};foreach(var export in controls)Check(NativeLibrary.TryGetExport(dll,export,out _),"Native export "+export);
  using(var output=new DirectOutput(Path.Combine(root,"Profiles","games.json"),nativeHeap,nativeHeap+"Mutex",false)){
@@ -63,11 +132,12 @@ public static class SelfTests
  var recenterName="Local\\HeadRelay.RecenterTest."+Guid.NewGuid();
  Environment.SetEnvironmentVariable("HEADRELAY_BRIDGE_RECENTER",recenterName);
  using(var request=new EventWaitHandle(false,EventResetMode.AutoReset,recenterName)){
- var library=NativeLibrary.Load(Path.Combine(root,"Bridge","NPClient64.dll"));try{var re=Marshal.GetDelegateForFunctionPointer<NativeControl>(NativeLibrary.GetExport(library,"NP_ReCenter"));Check(re()==0&&request.WaitOne(500),"Native recenter event reaches application");}finally{NativeLibrary.Free(library);Environment.SetEnvironmentVariable("HEADRELAY_BRIDGE_RECENTER",null);}}
+ var library=NativeLibrary.Load(Path.Combine(root,"Bridge","freetrackclient64.dll"));try{var re=Marshal.GetDelegateForFunctionPointer<NativeControl>(NativeLibrary.GetExport(library,"NP_ReCenter"));Check(re()==0&&request.WaitOne(500),"Native recenter event reaches application");}finally{NativeLibrary.Free(library);Environment.SetEnvironmentVariable("HEADRELAY_BRIDGE_RECENTER",null);}}
 
+ CheckIntegration(Check);
  var window=(Window)XamlReader.Load(File.OpenRead(Path.Combine(root,"Interface.xaml")));foreach(var n in new[]{"PageDashboard","PageDevices","PageCalibration","PageOutput","PageSettings","PageDiagnostics","CaptureButton","ConnectButton","StartButton","DeviceChoice","InstallButton","RestoreButton"})Check(window.FindName(n) is not null,"UI control: "+n);window.Close();
  Check(GameIntegration.NPKey==@"SOFTWARE\NaturalPoint\NATURALPOINT\NPClient Location","Registry path is correct");
- var result="PASS: "+count+" checks\n"+string.Join("\n",notes)+"\nNo registry values were changed by these tests.\n";File.WriteAllText(report,result);Console.WriteLine(result);return 0;
+ var result="PASS: "+count+" checks\n"+string.Join("\n",notes)+"\nGame registration was tested in an isolated temporary user key.\n";File.WriteAllText(report,result);Console.WriteLine(result);return 0;
  }catch(Exception ex){var result="FAIL after "+count+" checks\n"+ex;File.WriteAllText(report,result);Console.Error.WriteLine(result);return 1;}
  }
 }

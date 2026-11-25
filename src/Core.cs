@@ -8,7 +8,6 @@ using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Win32;
 using Microsoft.Win32.SafeHandles;
 
 namespace HeadRelay;
@@ -195,26 +194,4 @@ public sealed class DirectOutput:IDisposable
  var y=(float)(-yaw*Math.PI/180);var safePitch=Math.Abs(pitch-90)<.15?89.86:pitch;var p=(float)(-safePitch*Math.PI/180);view.Write(12,y);view.Write(16,p);view.Write(20,0f);view.Write(24,0f);view.Write(28,0f);view.Write(32,0f);view.Write(36,y);view.Write(40,-p);for(int i=44;i<92;i+=4)view.Write(i,0f);view.Write(0,sequence++);
  }finally{if(owned)mutex.ReleaseMutex();}}
  public void Dispose(){try{Write(0,0);}catch{}view.Dispose();mem.Dispose();mutex.Dispose();if(helper is not null){try{if(!helper.HasExited)helper.Kill();}catch{}helper.Dispose();helper=null;}}
-}
-public sealed record RegistryValueBackup(string Key,string Name,bool Existed,string? Value);
-public static class GameIntegration
-{
- public const string NPKey="SOFTWARE\\NaturalPoint\\NATURALPOINT\\NPClient Location";
- public const string FTKey="SOFTWARE\\Freetrack\\FreetrackClient";
- public static string BridgeDir=>Path.Combine(AppContext.BaseDirectory,"Bridge")+Path.DirectorySeparatorChar;
- static string BackupPath=>Path.Combine(AppSettings.DataDir,"integration-backup.json");
- public static bool Installed(){using var k=Registry.CurrentUser.OpenSubKey(NPKey);return string.Equals(k?.GetValue("Path") as string,BridgeDir,StringComparison.OrdinalIgnoreCase);}
- public static void Install()
- {
- if(!File.Exists(Path.Combine(BridgeDir,"NPClient64.dll"))||!File.Exists(Path.Combine(BridgeDir,"NPClient.dll")))throw new Exception("TrackIR-Brücke fehlt im App-Ordner.");
- Directory.CreateDirectory(AppSettings.DataDir);var pairs=new[]{(NPKey,"Path"),(FTKey,"Path")};
- if(!File.Exists(BackupPath)){var saved=pairs.Select(p=>{using var k=Registry.CurrentUser.OpenSubKey(p.Item1);return new RegistryValueBackup(p.Item1,p.Item2,k?.GetValueNames().Contains(p.Item2)==true,k?.GetValue(p.Item2) as string);}).ToArray();File.WriteAllText(BackupPath,JsonSerializer.Serialize(saved,new JsonSerializerOptions{WriteIndented=true}));}
- foreach(var p in pairs){using var k=Registry.CurrentUser.CreateSubKey(p.Item1);k.SetValue(p.Item2,BridgeDir,RegistryValueKind.String);}
- }
- public static void Restore()
- {
- if(!File.Exists(BackupPath))throw new Exception("Keine vorherige Einrichtung gesichert.");var saved=JsonSerializer.Deserialize<RegistryValueBackup[]>(File.ReadAllText(BackupPath))??Array.Empty<RegistryValueBackup>();
- foreach(var b in saved){if(!new[]{NPKey,FTKey}.Contains(b.Key)||b.Name!="Path")continue;using var k=Registry.CurrentUser.OpenSubKey(b.Key,true);if(k is null)continue;if(!string.Equals(k.GetValue(b.Name) as string,BridgeDir,StringComparison.OrdinalIgnoreCase))continue;if(b.Existed)k.SetValue(b.Name,b.Value??"",RegistryValueKind.String);else k.DeleteValue(b.Name,false);}
- File.Move(BackupPath,BackupPath+".restored-"+DateTime.Now.ToString("yyyyMMddHHmmss"),true);
- }
 }

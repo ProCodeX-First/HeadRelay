@@ -1,53 +1,49 @@
-# HeadRelay 0.2.0
+# HeadRelay 0.2.1
 
-HeadRelay überträgt Kopfbewegungen eines JBL Quantum 910 oder 950 auf die Spielkamera. Die Windows-App liest den Headset-Sensor über USB-HID, kalibriert Drehen und Nicken und gibt die Bewegungen über eine eigene 32-/64-Bit-Spielbrücke oder per UDP aus.
+HeadRelay steuert die Spielkamera mit den Kopfbewegungen eines JBL Quantum 910 oder 950. Die Windows-App liest den Sensor am USB-Dongle oder an der Basisstation. Für Star Citizen sendet HeadRelay die Bewegung an die TrackIR-Schnittstelle aus der lokalen OpenTrack-Installation.
 
-## Systemvoraussetzungen
+## Voraussetzungen und Download
 
-- Windows x64 und [.NET Desktop Runtime 10 für Windows x64](https://dotnet.microsoft.com/download/dotnet/10.0).
-- Zum Spielen ein unterstütztes Headset mit verbundenem USB-Dongle oder Basisstation und aktiviertem Headtracking. Die automatischen Tests laufen ohne Headset.
+- Windows x64 mit der [.NET Desktop Runtime 10 für Windows x64](https://dotnet.microsoft.com/download/dotnet/10.0).
+- JBL Quantum 910 oder 950 mit verbundenem Dongle bzw. verbundener Basisstation und aktiviertem Headtracking.
+- Für die direkte Spielanbindung OpenTrack für Windows installieren. HeadRelay benötigt die Dateien `modules/NPClient.dll` und `modules/NPClient64.dll` aus der Installation. OpenTrack selbst während des Spielens geschlossen lassen. [OpenTrack für Windows herunterladen](https://github.com/opentrack/opentrack/releases)
+- `HeadRelay-0.2.1-Windows.zip` vollständig in einen beschreibbaren Ordner entpacken und `HeadRelay.exe` starten. [Windows-ZIP herunterladen](https://github.com/ProCodeX-First/HeadRelay/releases/download/v0.2.1/HeadRelay-0.2.1-Windows.zip)
 
-## Starten
+## In Star Citizen umschauen
 
-Die Windows-ZIP unter [Releases](../../releases) vollständig in einen beschreibbaren Ordner entpacken und `HeadRelay.exe` starten.
+1. In HeadRelay das Headset verbinden. Beim ersten Start unter **Kalibrierung** nacheinander geradeaus schauen, nach rechts drehen und nach oben schauen. Wieder geradeaus schauen und zentrieren.
+2. Unter **Spielanbindung** die direkte Ausgabe wählen und einmal auf **Spielanbindung einrichten** klicken. HeadRelay findet OpenTrack in den üblichen Installationsordnern. Bei einer Installation in einem eigenen Ordner die dortige `opentrack.exe` auswählen.
+3. **Tracking starten**. Dann Star Citizen starten. War das Spiel bei der Einrichtung bereits geöffnet, das Spiel vollständig beenden und neu starten.
+4. In Star Citizen unter **Options → Comms, FoIP & Head Tracking** als Quelle **TrackIR** wählen und Headtracking aktivieren. Wenn die Verbindung steht, erscheint in HeadRelay **Star Citizen**. F9 zentriert den Blick. F10 pausiert die Ausgabe oder setzt sie fort.
 
-1. Headset verbinden.
-2. Unter Kalibrierung geradeaus, nach rechts und nach oben aufnehmen. Anschließend wieder geradeaus schauen und zentrieren.
-3. Unter Spielanbindung die eigene HeadRelay-Spielbrücke einmal einrichten. Dafür werden nur Benutzer-Registrywerte geändert; vorhandene Pfade werden gesichert.
-4. Tracking starten, danach das Spiel starten oder neu starten. Als Quelle TrackIR auswählen, falls das Spiel diese Schnittstelle verwendet.
-5. F9 zentriert. F10 pausiert oder setzt die Ausgabe fort. Empfindlichkeit, Kurve, Ruhezone und Glättung stehen unter Bewegung.
+### Update von 0.2.0
 
-Vorherige Anbindung wiederherstellen setzt gespeicherte Registrywerte nur zurück, wenn der aktuelle Wert noch zur eigenen HeadRelay-Brücke gehört. App-Ordner nach der Einrichtung nicht verschieben; andernfalls erneut einrichten. Andere Tracking-Sender vor direkter Ausgabe schließen.
+Wer die Spielanbindung der alten Version später vollständig zurücksetzen möchte, kann vor dem Wechsel dort **Vorherige Anbindung wiederherstellen** wählen. Die alte App vor dem Wechsel schließen. Die neue ZIP in einen eigenen Ordner entpacken. Für die bisherige Kalibrierung bei geschlossenen Apps nur `Data/settings.json` in den gleichnamigen Unterordner der neuen Version kopieren. Danach die Spielanbindung in **0.2.1** erneut einrichten und die Startreihenfolge oben beachten.
 
-## Aus dem Quellcode bauen
+Wenn sich die Vorschau bewegt, HeadRelay aber weiterhin **Warte auf Spiel** anzeigt, unter **Spielanbindung** die Einrichtung erneut ausführen. Anschließend das Tracking starten und das Spiel neu öffnen. Der frühere Download 0.2.0 enthielt eine eigene TrackIR-Client-DLL, mit der Star Citizen im Praxistest keine Verbindung aufgebaut hat.
 
-Auf Windows x64 das [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) und [Zig 0.13.0 für Windows x64](https://ziglang.org/download/0.13.0/) installieren. Das Verzeichnis mit `zig.exe` zum PATH hinzufügen. In PowerShell im Projektstamm ausführen.
+## Bauen und testen
+
+Windows x64, das [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) und [Zig 0.13.0 für Windows x64](https://ziglang.org/download/0.13.0/) werden zum Bauen benötigt. Den Ordner mit `zig.exe` zum PATH hinzufügen und im Projektstamm in PowerShell ausführen.
 
 ```powershell
 .\tools\Build.ps1
 ```
 
-Über `-ZigPath` lässt sich alternativ der Pfad zur entpackten `zig.exe` angeben. Das Skript baut beide nativen Brücken und die WPF-App. Es entpackt die neu erzeugte ZIP, führt den App-Selbsttest und einen separaten nativen x86-Test aus. Das geprüfte Paket liegt anschließend unter `artifacts/HeadRelay-0.2.0-Windows.zip`. Für einen erneuten Selbsttest in der entpackten ZIP `.\HeadRelay.exe --test` ausführen. Das Ergebnis steht in `Tests/TestResults.txt`.
+Alternativ akzeptiert das Skript `-ZigPath` mit dem Pfad zur entpackten `zig.exe`. Es baut die WPF-App, die FreeTrack-DLLs für x86 und x64 und den Hilfsprozess. Es entpackt die erzeugte ZIP, prüft ihren Inhalt und führt die Selbsttests sowie einen separaten nativen x86-Test aus. Das geprüfte Paket liegt unter `artifacts/HeadRelay-0.2.1-Windows.zip`. Die Selbsttests lassen sich mit `.\HeadRelay.exe --test` wiederholen. Das Ergebnis steht in `Tests/TestResults.txt`. Die Tests verwenden eigene temporäre Registrywerte und funktionieren auch ohne Headset.
 
-## Funktionsstand und Grenzen
+## Getestete Geräte und Ausgabe
 
-- Sensoradapter für JBL Quantum 910 und 950; persönliche Achsenkalibrierung, Vorschau, Bewegungsfilter, Hotkeys und Diagnoseexport.
-- Eigene 32- und 64-Bit-Spielbrücke. Es werden keine kopierten OpenTrack- oder NaturalPoint-Binaries mitgeliefert.
-- Neu geschriebener Hilfsprozess TrackIR.exe dient der Prozess-Erkennung einzelner Spiele und endet mit HeadRelay. Er ist keine NaturalPoint-Anwendung.
-- Das eingebaute Star-Citizen-Profil und die Paketübertragung werden mit Protokolltests geprüft. Ein Test dieser neuen Brücke im laufenden Star Citizen steht noch aus.
-- Hersteller-Signaturdaten werden nicht mitgeliefert. Spiele, die diese Signaturen prüfen, sind nicht als kompatibel bestätigt.
-- Nur Drehen/Nicken; keine Positionsmessung und keine Roll-Ausgabe.
-- Gemessen am 30.10.2026 über ca. 20 Sekunden im vorhandenen Funk-/USB-Aufbau: 910 etwa 99,6 Rotationspakete/s, 950 etwa 23,5. Dies sind Messwerte dieses Aufbaus, keine allgemeine Sensorgrenze.
-- Weitere Headsets und Spiele sind nicht pauschal unterstützt. Numerische Spieleprofile können in Profiles/games.json ergänzt werden. Format: JSON-Liste mit Id, Name und KeyHex (16 Hex-Zeichen; 0000000000000000 für unverschlüsselten Modus).
-
-## Optionale UDP-Ausgabe
-
-UDP / FreePIE überträgt an 127.0.0.1:5555. Dafür ist ein passender Empfänger erforderlich. Diese optionale Ausgabe ist unabhängig von der direkten HeadRelay-Brücke.
+- **JBL Quantum 910 und 950** wurden am Sensor getestet. Im Testaufbau vom 30.10.2026 lieferte das 910 über rund 20 Sekunden etwa 99,6 Rotationspakete pro Sekunde, das 950 etwa 23,5. Andere Modelle sind bisher ungetestet.
+- **Star Citizen LIVE und JBL Quantum 950** wurden mit dem OpenTrack-Client im Spiel getestet. Die Kopfbewegung steuerte die Kamera. Für die ZIP von 0.2.1 werden Pfadauswahl, Registrierung, Wiederherstellung und Datenausgabe separat automatisiert geprüft.
+- **Bewegung** umfasst Drehen und Nicken. Empfindlichkeit, Ruhezone und Glättung sind einstellbar. Weitere Spieleprofile lassen sich in `Profiles/games.json` ergänzen. [Profilformat](Profiles/README.md)
+- **FreeTrack** verwendet die eigenen 32- und 64-Bit-DLLs im Ordner `Bridge`. Der mitgelieferte Hilfsprozess `TrackIR.exe` dient der Spielerkennung und endet mit HeadRelay.
+- **UDP / FreePIE** sendet optional an `127.0.0.1:5555`. Dafür wird ein passender Empfänger benötigt. Diese Ausgabe funktioniert unabhängig von der OpenTrack-Installation.
 
 ## Einstellungen und Diagnose
 
-Data/settings.json enthält Einstellungen und persönliche Kalibrierung. Data/integration-backup.json sichert vorherige Registrypfade. Diagnoseberichte entstehen erst beim Export unter Diagnose. Diese Dateien sind nicht Teil des Downloads und sollten vor öffentlichem Teilen geprüft werden.
+Die Einrichtung speichert die bisherigen Spielpfade in `Data/integration-backup.json`. **Vorherige Anbindung wiederherstellen** setzt nur Pfade zurück, die noch auf die eingerichteten Ziele zeigen. Nach dem Verschieben des App-Ordners die Spielanbindung erneut einrichten. Persönliche Kalibrierung und Einstellungen stehen in `Data/settings.json`. Diagnoseberichte entstehen beim Export in der App.
 
 ## Lizenz
 
-HeadRelay steht unter der [MIT-Lizenz](LICENSE). Wer Teile in VerseKit oder ein anderes GPL-3.0-Projekt übernimmt, muss die zugehörigen Hinweise beibehalten. Sie stehen in [THIRD_PARTY.md](THIRD_PARTY.md) und im Ordner [Licenses](Licenses). JBL, TrackIR und die genannten Spiele sind Marken ihrer jeweiligen Inhaber. HeadRelay ist ein unabhängiges Projekt.
+HeadRelay steht unter der [MIT-Lizenz](LICENSE). Bei einer Übernahme in VerseKit oder ein anderes GPL-3.0-Projekt sind die Urheber- und Lizenzhinweise der übernommenen Teile beizubehalten. Einzelheiten stehen in [THIRD_PARTY.md](THIRD_PARTY.md) und [Licenses](Licenses). JBL, TrackIR und Star Citizen sind Marken ihrer jeweiligen Inhaber.
